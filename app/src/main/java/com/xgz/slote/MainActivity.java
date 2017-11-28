@@ -1,4 +1,3 @@
-
 package com.xgz.slote;
 
 import android.content.BroadcastReceiver;
@@ -12,24 +11,43 @@ import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
+import android.os.Handler;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.View;
+import android.widget.Button;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 
+import butterknife.ButterKnife;
+import butterknife.InjectView;
+import butterknife.OnClick;
+
 public class MainActivity extends AppCompatActivity {
+
+    private final String SLOTE_AP_NANE = "solte_config";
+    private final String SLOTE_AP_PASSWORD = "solte_config";
+    @InjectView(R.id.button_search)
+    Button buttonSearch;
+    @InjectView(R.id.progress_search)
+    ProgressBar progressSearch;
+    @InjectView(R.id.text_search)
+    TextView textSearch;
+    Handler handler = new Handler();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        ButterKnife.inject(this);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
@@ -41,7 +59,8 @@ public class MainActivity extends AppCompatActivity {
                         .setAction("Action", null).show();
             }
         });
-        searchWifi();
+        progressSearch.setVisibility(View.GONE);
+        textSearch.setVisibility(View.GONE);
     }
 
     WifiManager wifiManager;
@@ -50,21 +69,22 @@ public class MainActivity extends AppCompatActivity {
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
         intentFilter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
+        intentFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
         registerReceiver(receiver, intentFilter);
         wifiManager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
         if (wifiManager.isWifiEnabled()) {
             if (isWifiConnected(getApplicationContext())) {
                 WifiInfo info = wifiManager.getConnectionInfo();
                 String ssid = info.getSSID();
-                if (!"\"solte_config\"".equals(ssid)) {
+                if (!("\"" + SLOTE_AP_NANE + "\"").equals(ssid)) {
                     wifiManager.disconnect();
                     WifiConfiguration configuration = isExsits2(ssid);
                     if (configuration != null) {
                         wifiManager.removeNetwork(configuration.networkId);
-                        if(wifiManager.saveConfiguration())
-                            Log.i("remove","ok");
+                        if (wifiManager.saveConfiguration())
+                            Log.i("remove", "ok");
                         else
-                            Log.i("remove","failed");
+                            Log.i("remove", "failed");
                     }
                     searchWifi2();
                 }
@@ -78,15 +98,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void searchWifi2() {
-        if(wifiManager.startScan())
-            Log.i("wifi","scan");
+        if (wifiManager.startScan())
+            Log.i("wifi", "scan");
         else
-            Log.i("wifi","scan failed");
+            Log.i("wifi", "scan failed");
         //List<ScanResult> scanResults = wifiManager.getScanResults();
     }
 
     private void linkWifi() {
-        WifiConfiguration config = createWifiInfo("bong_tech", "ihuangshang", 3, "wt");
+        WifiConfiguration config = createWifiInfo(SLOTE_AP_NANE, SLOTE_AP_PASSWORD, 3, "wt");
         int wcgID = wifiManager.addNetwork(config);
         wifiManager.enableNetwork(wcgID, true);
     }
@@ -97,12 +117,36 @@ public class MainActivity extends AppCompatActivity {
             final String action = intent.getAction();
             if (action.equals(WifiManager.WIFI_STATE_CHANGED_ACTION)) {
                 int wifistate = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_DISABLED);
+                switch (wifistate) {
+                    case WifiManager.WIFI_STATE_ENABLED:
+                        break;
+                    case WifiManager.WIFI_STATE_DISABLING:
+                        break;
+                }
+            }
+            if (action.equals(ConnectivityManager.CONNECTIVITY_ACTION)) {
+                Boolean isConnected = intent.getBooleanExtra(ConnectivityManager.EXTRA_NO_CONNECTIVITY, false);
+                if (isConnected) {
+                    WifiInfo info = wifiManager.getConnectionInfo();
+                    String ssid = info.getSSID();
+                    if (!("\"" + SLOTE_AP_NANE + "\"").equals(ssid)) {
+                        progressRunnable.progressText = "已连接到设备，正在设置...";
+                    } else {
+                        handler.removeCallbacks(progressRunnable);
+                        progressRunnable.progressText = "设备连接异常，请重试";
+                        handler.post(progressRunnable);
+                        reset();
+                    }
+                } else {
+
+                }
             }
             if (action.equals(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)) {
                 // wifi已成功扫描到可用wifi。
                 List<ScanResult> scanResults = wifiManager.getScanResults();
                 for (ScanResult result : scanResults) {
-                    if ("bong_tech".equals(result.SSID)) {
+                    if (SLOTE_AP_NANE.equals(result.SSID)) {
+                        progressRunnable.progressText = "已搜索到设备，正在连接...";
                         linkWifi();
                         break;
                     }
@@ -156,6 +200,49 @@ public class MainActivity extends AppCompatActivity {
 
     private void sortByPriority(List<WifiConfiguration> paramList) {
         Collections.sort(paramList, new SjrsWifiManagerCompare());
+    }
+
+    private class ProgressRunnable implements Runnable {
+
+        String progressText;
+        int progress = 0;
+
+        @Override
+        public void run() {
+            progress++;
+            progressSearch.setProgress(progress);
+            textSearch.setText(progressText + progress + "%");
+            if (progress < 100)
+                handler.postDelayed(progressRunnable, 500);
+            else {
+                textSearch.setText("操作超时，请重试！");
+            }
+        }
+    }
+
+    private ProgressRunnable progressRunnable = new ProgressRunnable();
+
+    private void reset() {
+        buttonSearch.setText("点击搜索附近的斯洛特");
+    }
+
+    @OnClick(R.id.button_search)
+    public void onViewClicked() {
+        if (buttonSearch.getText().toString().contains("点击搜索")) {
+            buttonSearch.setText("取消搜索");
+            progressSearch.setVisibility(View.VISIBLE);
+            textSearch.setVisibility(View.VISIBLE);
+            progressRunnable.progressText = "正在搜索...请耐心等待。";
+            progressRunnable.progress = 0;
+            handler.post(progressRunnable);
+            searchWifi();
+        }
+        if (buttonSearch.getText().toString().contains("取消搜索")) {
+            handler.removeCallbacks(progressRunnable);
+            buttonSearch.setText("点击搜索附近的斯洛特");
+            progressSearch.setVisibility(View.GONE);
+            textSearch.setVisibility(View.GONE);
+        }
     }
 
     class SjrsWifiManagerCompare implements Comparator<WifiConfiguration> {
