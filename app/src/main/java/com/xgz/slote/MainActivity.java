@@ -10,6 +10,7 @@ import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.design.widget.FloatingActionButton;
@@ -18,10 +19,17 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.View;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -33,14 +41,16 @@ import butterknife.OnClick;
 
 public class MainActivity extends AppCompatActivity {
 
-    private final String SLOTE_AP_NANE = "solte_config";
-    private final String SLOTE_AP_PASSWORD = "solte_config";
+    private final String SLOTE_AP_NANE = "bong_tech";
+    private final String SLOTE_AP_PASSWORD = "ihuangshang";
     @InjectView(R.id.button_search)
     Button buttonSearch;
     @InjectView(R.id.progress_search)
     ProgressBar progressSearch;
     @InjectView(R.id.text_search)
     TextView textSearch;
+    @InjectView(R.id.imageView)
+    ImageView imageView;
     Handler handler = new Handler();
 
     @Override
@@ -66,6 +76,8 @@ public class MainActivity extends AppCompatActivity {
     WifiManager wifiManager;
 
     private void searchWifi() {
+        Animation animation=AnimationUtils.loadAnimation(this,R.anim.search_anim);
+        imageView.startAnimation(animation);
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
         intentFilter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
@@ -87,6 +99,8 @@ public class MainActivity extends AppCompatActivity {
                             Log.i("remove", "failed");
                     }
                     searchWifi2();
+                } else {
+                    textSearch.setText("已经连接上斯洛特");
                 }
             } else {
                 searchWifi2();
@@ -125,20 +139,23 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             if (action.equals(ConnectivityManager.CONNECTIVITY_ACTION)) {
-                Boolean isConnected = intent.getBooleanExtra(ConnectivityManager.EXTRA_NO_CONNECTIVITY, false);
-                if (isConnected) {
-                    WifiInfo info = wifiManager.getConnectionInfo();
-                    String ssid = info.getSSID();
-                    if (!("\"" + SLOTE_AP_NANE + "\"").equals(ssid)) {
-                        progressRunnable.progressText = "已连接到设备，正在设置...";
-                    } else {
-                        handler.removeCallbacks(progressRunnable);
-                        progressRunnable.progressText = "设备连接异常，请重试";
-                        handler.post(progressRunnable);
-                        reset();
-                    }
-                } else {
 
+                if (intent.hasExtra("networkInfo")) {
+                    NetworkInfo networkInfo = intent.getParcelableExtra("networkInfo");
+                    if (networkInfo.isConnected()) {
+                        String ssid = networkInfo.getExtraInfo();
+                        if (("\"" + SLOTE_AP_NANE + "\"").equals(ssid)) {
+                            progressRunnable.progressText = "已连接到设备，正在设置...";
+                            new MyTask().execute(0);
+                        } else {
+                            handler.removeCallbacks(progressRunnable);
+                            progressRunnable.progressText = "设备连接异常，请重试";
+                            handler.post(progressRunnable);
+                            reset();
+                        }
+                    } else {
+
+                    }
                 }
             }
             if (action.equals(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)) {
@@ -236,8 +253,7 @@ public class MainActivity extends AppCompatActivity {
             progressRunnable.progress = 0;
             handler.post(progressRunnable);
             searchWifi();
-        }
-        if (buttonSearch.getText().toString().contains("取消搜索")) {
+        } else if (buttonSearch.getText().toString().contains("取消搜索")) {
             handler.removeCallbacks(progressRunnable);
             buttonSearch.setText("点击搜索附近的斯洛特");
             progressSearch.setVisibility(View.GONE);
@@ -367,5 +383,50 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return localWifiConfiguration1;
+    }
+
+    private class MyTask extends AsyncTask<Integer, Integer, String> {
+        private Socket socket = new Socket();
+        private final String hostname = "192.168.1.240";
+        private final int port = 8888;
+        OutputStream outputStream;
+
+        @Override
+        protected void onPreExecute() {
+            //textSearch.setText("已连接到设备，正在设置...");
+            //handler.removeCallbacks(progressRunnable);
+        }
+
+        @Override
+        protected String doInBackground(Integer... integers) {
+            try {
+                SocketAddress address = new InetSocketAddress(hostname, port);
+                socket.connect(address, 10000);
+                outputStream = socket.getOutputStream();
+            } catch (Exception e) {
+                e.printStackTrace();
+                return e.getMessage();
+            }
+            return null;
+        }
+
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            super.onProgressUpdate(values);
+        }
+
+        @Override
+        protected void onPostExecute(String result) {
+            if (result != null) {
+                handler.removeCallbacks(progressRunnable);
+                progressRunnable.progressText = "设置出错：" + result;
+                textSearch.setText(progressRunnable.progressText);
+            } else
+                progressRunnable.progressText = "正在传输数据...";
+        }
+
+        public void write(byte... data) throws Exception {
+            outputStream.write(data);
+        }
     }
 }
