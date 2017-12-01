@@ -41,7 +41,7 @@ import butterknife.OnClick;
 
 public class MainActivity extends AppCompatActivity {
 
-    private final String SLOTE_AP_NANE = "bong_tech";
+    private final String SLOTE_AP_NANE = "bong_tech_1_5G";
     private final String SLOTE_AP_PASSWORD = "ihuangshang";
     @InjectView(R.id.button_search)
     Button buttonSearch;
@@ -52,6 +52,7 @@ public class MainActivity extends AppCompatActivity {
     @InjectView(R.id.imageView)
     ImageView imageView;
     Handler handler = new Handler();
+    public static MyTask myTask;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -73,16 +74,28 @@ public class MainActivity extends AppCompatActivity {
         textSearch.setVisibility(View.GONE);
     }
 
-    WifiManager wifiManager;
+    @Override
+    protected void onPause() {
+        unregisterReceiver(receiver);
+        super.onPause();
+    }
 
-    private void searchWifi() {
-        Animation animation=AnimationUtils.loadAnimation(this,R.anim.search_anim);
-        imageView.startAnimation(animation);
+    @Override
+    protected void onResume() {
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
         intentFilter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
         intentFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
         registerReceiver(receiver, intentFilter);
+        super.onResume();
+    }
+
+    WifiManager wifiManager;
+
+    private void searchWifi() {
+        Animation animation = AnimationUtils.loadAnimation(this, R.anim.search_anim);
+        imageView.startAnimation(animation);
+
         wifiManager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
         if (wifiManager.isWifiEnabled()) {
             if (isWifiConnected(getApplicationContext())) {
@@ -101,6 +114,8 @@ public class MainActivity extends AppCompatActivity {
                     searchWifi2();
                 } else {
                     textSearch.setText("已经连接上斯洛特");
+                    progressRunnable.progressText = "已连接到设备，正在设置...";
+                    new MyTask().execute(0);
                 }
             } else {
                 searchWifi2();
@@ -146,12 +161,17 @@ public class MainActivity extends AppCompatActivity {
                         String ssid = networkInfo.getExtraInfo();
                         if (("\"" + SLOTE_AP_NANE + "\"").equals(ssid)) {
                             progressRunnable.progressText = "已连接到设备，正在设置...";
-                            new MyTask().execute(0);
+                            if (myTask != null)
+                                myTask.close();
+                            myTask = null;
+                            myTask = new MyTask();
+                            myTask.execute(0);
                         } else {
                             handler.removeCallbacks(progressRunnable);
                             progressRunnable.progressText = "设备连接异常，请重试";
                             handler.post(progressRunnable);
                             reset();
+                            OnError(progressRunnable.progressText);
                         }
                     } else {
 
@@ -233,6 +253,7 @@ public class MainActivity extends AppCompatActivity {
                 handler.postDelayed(progressRunnable, 500);
             else {
                 textSearch.setText("操作超时，请重试！");
+                OnError("操作超时，请重试！");
             }
         }
     }
@@ -258,6 +279,7 @@ public class MainActivity extends AppCompatActivity {
             buttonSearch.setText("点击搜索附近的斯洛特");
             progressSearch.setVisibility(View.GONE);
             textSearch.setVisibility(View.GONE);
+            imageView.clearAnimation();
         }
     }
 
@@ -385,10 +407,17 @@ public class MainActivity extends AppCompatActivity {
         return localWifiConfiguration1;
     }
 
-    private class MyTask extends AsyncTask<Integer, Integer, String> {
+    private void OnError(String msg) {
+        imageView.clearAnimation();
+        handler.removeCallbacks(progressRunnable);
+        buttonSearch.setText("点击搜索附近的斯洛特");
+        textSearch.setText(msg);
+    }
+
+    public class MyTask extends AsyncTask<Integer, Integer, String> {
         private Socket socket = new Socket();
-        private final String hostname = "192.168.1.240";
-        private final int port = 8888;
+        private final String hostname = "192.168.1.210";
+        private final int port = 8000;
         OutputStream outputStream;
 
         @Override
@@ -403,6 +432,7 @@ public class MainActivity extends AppCompatActivity {
                 SocketAddress address = new InetSocketAddress(hostname, port);
                 socket.connect(address, 10000);
                 outputStream = socket.getOutputStream();
+                outputStream.write("Hello".getBytes());
             } catch (Exception e) {
                 e.printStackTrace();
                 return e.getMessage();
@@ -421,12 +451,44 @@ public class MainActivity extends AppCompatActivity {
                 handler.removeCallbacks(progressRunnable);
                 progressRunnable.progressText = "设置出错：" + result;
                 textSearch.setText(progressRunnable.progressText);
-            } else
+                OnError(progressRunnable.progressText);
+            } else {
                 progressRunnable.progressText = "正在传输数据...";
+                handler.removeCallbacks(progressRunnable);
+                buttonSearch.setText("点击搜索附近的斯洛特");
+                progressSearch.setVisibility(View.GONE);
+                textSearch.setVisibility(View.GONE);
+                imageView.clearAnimation();
+                startActivity(new Intent(MainActivity.this,WifiListActivity.class));
+            }
         }
 
         public void write(byte... data) throws Exception {
             outputStream.write(data);
+            outputStream.flush();
         }
+
+        public void close() {
+            try {
+                if (outputStream != null)
+                    outputStream.close();
+            } catch (Exception e) {
+
+            }
+            try {
+                if (socket != null)
+                    socket.close();
+            } catch (Exception e) {
+
+            }
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (myTask != null)
+            myTask.close();
+        myTask = null;
+        super.onDestroy();
     }
 }

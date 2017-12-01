@@ -18,7 +18,7 @@
         android:repeatMode="reverse"
         android:toXDelta="50%" />
     <translate
-        android:duration="1000"
+        android:duration="4000"
         android:fromYDelta="-100%"
         android:interpolator="@android:anim/cycle_interpolator"
         android:repeatCount="infinite"
