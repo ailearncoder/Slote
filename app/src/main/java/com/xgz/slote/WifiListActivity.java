@@ -152,6 +152,7 @@ public class WifiListActivity extends Activity {
                 intent.putExtra("ssid",scanResult.get(position).SSID);
                 intent.putExtra("password",password);
                 startActivity(intent);
+                finish();
             }
         });
         builder.setNegativeButton("取消",null);

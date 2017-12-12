@@ -110,21 +110,21 @@ public class ConfigActivity extends AppCompatActivity {
 
         @Override
         protected Integer doInBackground(Integer... integers) {
-            if (MainActivity.myTask == null) {
+            if (MainActivity2.myTask == null) {
                 publishProgress("通信连接中断");
                 return 0;
             }
             try {
                 String config = "%SSID=" + ssid.getText().toString() + "&%" + password.getText().toString() + "&#";
-                MainActivity.myTask.write(config.getBytes());
+                MainActivity2.myTask.write(config.getBytes());
                 publishProgress(config,"33");
                 Thread.sleep(1000);
                 config = "%USERKEY=" + userKey.getText().toString() + "&#";
-                MainActivity.myTask.write(config.getBytes());
+                MainActivity2.myTask.write(config.getBytes());
                 publishProgress(config,"66");
                 Thread.sleep(1000);
                 config = "%SVN=" + svnIp.getText().toString() + "&%" + svnPort.getText().toString() + "&#";
-                MainActivity.myTask.write(config.getBytes());
+                MainActivity2.myTask.write(config.getBytes());
                 publishProgress(config,"100");
                 Thread.sleep(1000);
             }catch (Exception e)
